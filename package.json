@@ -1,16 +1,30 @@
 {
   "name": "manikin",
   "description": "Data model abstractions",
-  "version": "0.0.1",
-  "main": "manikin.js",
+  "version": "0.1.0",
+  "main": "./lib/manikin-spec.js",
   "author": "Jakob Mattsson <jakob.mattsson@gmail.com> (jakobmattsson.se)",
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/jakobmattsson/manikin.git"
+  },
   "engines": {
-    "node": "*"
+    "node": ">= 0.8.x < 0.12"
   },
   "dependencies": {
-
+    "underscore": ">= 1.4.0 < 2",
+    "async": ">= 0.1.0 < 3",
+    "should": ">= 1.2.1 < 2"
   },
   "devDependencies": {
-
+    "coffee-script": ">= 1.4.0 < 2"
+  },
+  "peerDependencies": {
+    "mocha": ">= 1.7.4 < 2"
+  },
+  "scripts": {
+    "pretest": "coffee -co lib src",
+    "prepublish": "coffee -co lib src",
+    "prestart": "coffee -co lib src"
   }
 }
