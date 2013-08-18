@@ -480,6 +480,32 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
 
 
+    it "can delete an object", (done) ->
+      api = manikin.create()
+
+      model =
+        stuffz:
+          fields:
+            name: 'string'
+            age: 'number'
+            city: 'string'
+
+      saved = {}
+
+      promise(api).connect(connectionData, model, noErr())
+      .post('stuffz', { name: 'jakob', age: 28, city: 'gbg' }, noErr())
+      .post('stuffz', { name: 'julia', age: 27, city: 'gbg' }, noErr())
+      .delOne('stuffz', { name: 'julia' }, noErr())
+      .list('stuffz', { }, noErr (x) ->
+        x.should.have.length 1
+        x[0].name.should.eql 'jakob'
+        x[0].age.should.eql 28
+        x[0].city.should.eql 'gbg'
+      ).then ->
+        api.close(done)
+
+
+
     it "should allow a basic set of primitive data types to be stored and retrieved", (done) ->
       api = manikin.create()
 
@@ -713,7 +739,42 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
 
 
-    it "should provide some typical http-operations", (done) ->
+    it "should detect when an filter matches no objects on getOne", (done) ->
+      api = manikin.create()
+
+      model =
+        table:
+          fields:
+            v1: 'string'
+
+      promise(api).connect(connectionData, model, noErr())
+      .getOne('table', { filter: { v1: '123' } }, (err, data) ->
+        err.should.eql new Error()
+        err.toString().should.eql 'Error: No match'
+        should.not.exist data
+      ).then ->
+        api.close(done)
+
+
+    it "should detect when an filter matches no objects on delOne", (done) ->
+      api = manikin.create()
+
+      model =
+        table:
+          fields:
+            v1: 'string'
+
+      promise(api).connect(connectionData, model, noErr())
+      .delOne('table', { v1: '123' }, (err, data) ->
+        err.should.eql new Error()
+        err.toString().should.eql 'Error: No such id'
+        should.not.exist data
+      ).then ->
+        api.close(done)
+
+
+
+    it "should be possible to specifiy the owner together with the fields when creating an object", (done) ->
       api = manikin.create()
 
       model =
@@ -729,56 +790,290 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
             name: { type: 'string', default: '' }
             orgnr: { type: 'string', default: '' }
 
-        employees:
-          owners:
-            company: 'companies'
+      api.connect connectionData, model, noErr ->
+        api.post 'accounts', { name: 'a1' }, noErr (account) ->
+          account.should.have.keys ['name', 'id']
+          api.post 'companies', { name: 'n', orgnr: 'nbr', account: account.id }, noErr (company) ->
+            _(company).omit('id').should.eql {
+              account: account.id
+              name: 'n'
+              orgnr: 'nbr'
+            }
+            api.close(done)
+
+
+
+    it "should not be ok to post without specifiying the owner", (done) ->
+      api = manikin.create()
+
+      model =
+        accounts:
+          owners: {}
           fields:
             name: { type: 'string', default: '' }
 
-        customers:
+        companies:
+          owners:
+            account: 'accounts'
           fields:
-            name: { type: 'string' }
-            at: { type: 'hasMany', model: 'companies' }
+            name: { type: 'string', default: '' }
+            orgnr: { type: 'string', default: '' }
+
+      api.connect connectionData, model, noErr ->
+        api.post 'accounts', { name: 'a1' }, noErr (account) ->
+          account.should.have.keys ['name', 'id']
+          api.post 'companies', { name: 'n', orgnr: 'nbr' }, (err, company) ->
+            should.exist err # expect something more precise...
+            api.close(done)
+
+
+
+    it "must specify an existing owner of the right type when posting", (done) ->
+      api = manikin.create()
+
+      model =
+        stuff:
+          fields: {}
+
+        accounts:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+        companies:
+          owners:
+            account: 'accounts'
+          fields:
+            name: { type: 'string', default: '' }
+            orgnr: { type: 'string', default: '' }
+
+      api.connect connectionData, model, noErr ->
+        api.post 'stuff', { }, noErr (stuff) ->
+          api.post 'accounts', { name: 'a1' }, noErr (account) ->
+            account.should.have.keys ['name', 'id']
+            api.post 'companies', { name: 'n', orgnr: 'nbr', account: stuff.id }, (err, company) ->
+              should.exist err # expect something more precise...
+              api.close(done)
+
+
+
+    it "should introduce redundant references to all ancestors", (done) ->
+      api = manikin.create()
+
+      model =
+        accounts:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+        companies2:
+          owners:
+            account: 'accounts'
+          fields:
+            name: { type: 'string', default: '' }
+            orgnr: { type: 'string', default: '' }
+
+        contacts:
+          owners:
+            company: 'companies2'
+          fields:
+            email: { type: 'string', default: '' }
+            phone: { type: 'string', default: '' }
+
+        pets:
+          owners:
+            contact: 'contacts'
+          fields:
+            race: { type: 'string', default: '' }
 
       saved = {}
 
       promise(api).connect(connectionData, model, noErr())
-      .post('accounts', { name: 'n1' }, noErr (a1) ->
-        a1.should.have.keys ['name', 'id']
-        saved.a1 = a1
-      ).then('post', -> @ 'accounts', { name: 'n2' }, noErr (a2) ->
-        a2.should.have.keys ['name', 'id']
-        saved.a2 = a2
-      ).list('accounts', {}, noErr (accs) ->
-        accs.should.eql [saved.a1, saved.a2]
-      ).then('getOne', -> @ 'accounts', { filter: { id: saved.a1.id } }, noErr (acc) ->
-        acc.should.eql saved.a1
-      ).then('getOne', -> @ 'accounts', { filter: { name: 'n2' } }, noErr (acc) ->
-        acc.should.eql saved.a2
-      ).then('getOne', -> @ 'accounts', { filter: { name: 'does-not-exist' } }, (err, acc) ->
-        err.toString().should.eql 'Error: No match'
-        should.not.exist acc
+      .post('accounts', { name: 'a1', bullshit: 123 }, noErr (account) ->
+        account.should.have.keys ['name', 'id']
+        saved.account = account
+      ).then('post', -> @ 'companies2', { name: 'n', orgnr: 'nbr', account: saved.account.id }, noErr (company) ->
+        saved.company = company
+        company.should.have.keys ['id', 'name', 'orgnr', 'account']
+      ).then('post', -> @ 'companies2', { name: 'n2', orgnr: 'nbr', account: saved.account.id }, noErr (company2) ->
+        saved.company2 = company2
+        company2.should.have.keys ['id', 'name', 'orgnr', 'account']
+      ).then('post', -> @ 'contacts', { email: '@', phone: '112', company: saved.company.id }, noErr (contact) ->
+        saved.contact = contact
+        contact.should.have.keys ['id', 'email', 'phone', 'account', 'company']
+      ).then('post', -> @ 'contacts', { email: '@2', phone: '911', company: saved.company2.id }, noErr (contact2) ->
+        saved.contact2 = contact2
+        contact2.should.have.keys ['id', 'email', 'phone', 'account', 'company']
+      ).then('post', -> @ 'pets', { race: 'dog', contact: saved.contact.id }, noErr (pet) ->
+        pet.should.have.keys ['id', 'race', 'account', 'company', 'contact']
+        pet.contact.should.eql saved.contact.id
+        pet.company.should.eql saved.company.id
+        pet.account.should.eql saved.account.id
+      ).then('post', -> @ 'pets', { race: 'dog', contact: saved.contact2.id }, noErr (pet) ->
+        pet.should.have.keys ['id', 'race', 'account', 'company', 'contact']
+        pet.contact.should.eql saved.contact2.id
+        pet.company.should.eql saved.company2.id
+        pet.account.should.eql saved.account.id
 
-      ).then('post', -> @ 'companies', { account: saved.a1.id, name: 'J Dev AB', orgnr: '556767-2208' }, noErr (company) ->
-        company.should.have.keys ['name', 'orgnr', 'account', 'id', 'at']
-        saved.c1 = company
-      ).then('post', -> @ 'companies', { account: saved.a1.id, name: 'Lean Machine AB', orgnr: '123456-1234' }, noErr (company) ->
-        company.should.have.keys ['name', 'orgnr', 'account', 'id', 'at']
-        saved.c2 = company
-      ).then('post', -> @ 'employees', { company: saved.c1.id, name: 'Jakob' }, noErr (company) ->
-        company.should.have.keys ['name', 'company', 'account', 'id']
+      ).list('pets', {}, noErr ((res) -> res.length.should.eql 2))
+      .list('contacts', {}, noErr ((res) -> res.length.should.eql 2))
+      .list('companies2', {}, noErr ((res) -> res.length.should.eql 2))
+      .list('accounts', {}, noErr ((res) -> res.length.should.eql 1))
 
-      # testing to get an account without nesting
-      ).then('getOne', -> @ 'accounts', { filter: { id: saved.a1.id } }, noErr (acc) ->
-        _(acc).omit('id').should.eql { name: 'n1' }
-
-      # testing to get an account with nesting
-      ).then('getOne', -> @ 'accounts', { nesting: 1, filter: { id: saved.a1.id } }, noErr (acc) ->
-        _(acc).omit('id').should.eql { name: 'n1' }
+      .then -> api.close(done)
 
 
-      ).then ->
-        api.close(done)
+
+    it "should delete owned objects when deleting ancestors", (done) ->
+       api = manikin.create()
+
+       model =
+         accounts:
+           owners: {}
+           fields:
+             name: { type: 'string', default: '' }
+
+         companies2:
+           owners:
+             account: 'accounts'
+           fields:
+             name: { type: 'string', default: '' }
+             orgnr: { type: 'string', default: '' }
+
+         contacts:
+           owners:
+             company: 'companies2'
+           fields:
+             email: { type: 'string', default: '' }
+             phone: { type: 'string', default: '' }
+
+         pets:
+           owners:
+             contact: 'contacts'
+           fields:
+             race: { type: 'string', default: '' }
+
+       saved = {}
+
+       promise(api).connect(connectionData, model, noErr())
+       .post('accounts', { name: 'a1', bullshit: 123 }, noErr (account) ->
+         saved.account = account
+       ).then('post', -> @ 'companies2', { name: 'n', orgnr: 'nbr', account: saved.account.id }, noErr (company) ->
+         saved.company = company
+       ).then('post', -> @ 'companies2', { name: 'n2', orgnr: 'nbr', account: saved.account.id }, noErr (company2) ->
+         saved.company2 = company2
+       ).then('post', -> @ 'contacts', { email: '@', phone: '112', company: saved.company.id }, noErr (contact) ->
+         saved.contact = contact
+       ).then('post', -> @ 'contacts', { email: '@2', phone: '911', company: saved.company2.id }, noErr (contact2) ->
+         saved.contact2 = contact2
+       ).then('post', -> @ 'pets', { race: 'dog', contact: saved.contact.id }, noErr (pet) ->
+       ).then('post', -> @ 'pets', { race: 'dog', contact: saved.contact2.id }, noErr (pet) ->
+       ).list('pets', {}, noErr ((res) -> res.length.should.eql 2))
+       .list('contacts', {}, noErr ((res) -> res.length.should.eql 2))
+       .list('companies2', {}, noErr ((res) -> res.length.should.eql 2))
+       .list('accounts', {}, noErr ((res) -> res.length.should.eql 1))
+       .then('delOne', -> @ 'companies2', { id: saved.company.id }, noErr())
+       .list('pets', {}, noErr ((res) -> res.length.should.eql 1))
+       .list('contacts', {}, noErr ((res) -> res.length.should.eql 1))
+       .list('companies2', {}, noErr ((res) -> res.length.should.eql 1))
+       .list('accounts', {}, noErr ((res) -> res.length.should.eql 1))
+       .then -> api.close(done)
+
+
+
+    it "should raise an error if a putOne attempts to put using an id from another collection", (done) ->
+      api = manikin.create()
+
+      model =
+        accounts:
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, model, noErr ->
+        api.post 'accounts', { name: 'a1' }, noErr (account) ->
+          api.putOne 'accounts', { name: 'n1' }, { id: 1 }, (err, data) ->
+            err.should.eql new Error()
+            err.toString().should.eql 'Error: No such id'
+            api.close(done)
+
+
+
+    it "should allow undefined values", (done) ->
+      api = manikin.create()
+
+      model =
+        pizzas:
+          owners: {}
+          fields:
+            name:
+              type: 'string'
+
+      api.connect connectionData, model, noErr ->
+        api.post 'pizzas', { name: 'jakob' }, noErr (res) ->
+          api.putOne 'pizzas', { name: undefined }, { id: res.id }, noErr (res) ->
+            should.not.exist res.name
+            api.close(done)
+
+
+
+    it "should allow custom validators", (done) ->
+      api = manikin.create()
+
+      model =
+        pizzas:
+          owners: {}
+          fields:
+            name:
+              type: 'string'
+              validate: (apiRef, value, callback) ->
+                api.should.eql apiRef
+                callback(value.length % 2 == 0)
+
+      indata = [
+        name: 'jakob'
+        response: 'something wrong'
+      ,
+        name: 'tobias'
+        response: null
+      ]
+
+      api.connect connectionData, model, noErr ->
+        async.forEach indata, (d, callback) ->
+          api.post 'pizzas', { name: d.name }, (err, res) ->
+            if d.response != null
+              err.message.should.eql 'Validation failed'
+              err.errors.name.path.should.eql 'name'
+            callback()
+        , ->
+          api.close(done)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1015,31 +1310,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
 
 
-    it "should not be ok to post without specifiying the owner", (done) ->
-      api = manikin.create()
-
-      model =
-        accounts:
-          owners: {}
-          fields:
-            name: { type: 'string', default: '' }
-
-        companies:
-          owners:
-            account: 'accounts'
-          fields:
-            name: { type: 'string', default: '' }
-            orgnr: { type: 'string', default: '' }
-
-      api.connect connectionData, model, noErr ->
-        api.post 'accounts', { name: 'a1' }, noErr (account) ->
-          account.should.have.keys ['name', 'id']
-          api.post 'companies', { name: 'n', orgnr: 'nbr' }, (err, company) ->
-            should.exist err # expect something more precise...
-            api.close(done)
-
-
-
     it "should raise an error if a putOne attempts to put non-existing fields", (done) ->
       api = manikin.create()
 
@@ -1076,147 +1346,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
               err.toString().should.eql 'Error: No such id'
               api.close(done)
 
-
-
-    it "should raise an error if a putOne attempts to put using an id from another collection", (done) ->
-      api = manikin.create()
-
-      model =
-        accounts:
-          fields:
-            name: { type: 'string', default: '' }
-
-      api.connect connectionData, model, noErr ->
-        api.post 'accounts', { name: 'a1' }, noErr (account) ->
-          api.putOne 'accounts', { name: 'n1' }, { id: 1 }, (err, data) ->
-            err.should.eql new Error()
-            err.toString().should.eql 'Error: No such id'
-            api.close(done)
-
-
-
-    it "should allow undefined values", (done) ->
-      api = manikin.create()
-
-      model =
-        pizzas:
-          owners: {}
-          fields:
-            name:
-              type: 'string'
-
-      api.connect connectionData, model, noErr ->
-        api.post 'pizzas', { name: 'jakob' }, noErr (res) ->
-          api.putOne 'pizzas', { name: undefined }, { id: res.id }, noErr (res) ->
-            should.not.exist res.name
-            api.close(done)
-
-
-
-    it "should allow custom validators", (done) ->
-      api = manikin.create()
-
-      model =
-        pizzas:
-          owners: {}
-          fields:
-            name:
-              type: 'string'
-              validate: (apiRef, value, callback) ->
-                api.should.eql apiRef
-                callback(value.length % 2 == 0)
-
-      indata = [
-        name: 'jakob'
-        response: 'something wrong'
-      ,
-        name: 'tobias'
-        response: null
-      ]
-
-      api.connect connectionData, model, noErr ->
-        async.forEach indata, (d, callback) ->
-          api.post 'pizzas', { name: d.name }, (err, res) ->
-            if d.response != null
-              err.message.should.eql 'Validation failed'
-              err.errors.name.path.should.eql 'name'
-            callback()
-        , ->
-          api.close(done)
-
-
-
-    it "should introduce redundant references to all ancestors", (done) ->
-      api = manikin.create()
-
-      model =
-        accounts:
-          owners: {}
-          fields:
-            name: { type: 'string', default: '' }
-
-        companies2:
-          owners:
-            account: 'accounts'
-          fields:
-            name: { type: 'string', default: '' }
-            orgnr: { type: 'string', default: '' }
-
-        contacts:
-          owners:
-            company: 'companies2'
-          fields:
-            email: { type: 'string', default: '' }
-            phone: { type: 'string', default: '' }
-
-        pets:
-          owners:
-            contact: 'contacts'
-          fields:
-            race: { type: 'string', default: '' }
-
-      saved = {}
-
-      promise(api).connect(connectionData, model, noErr())
-      .post('accounts', { name: 'a1', bullshit: 123 }, noErr (account) ->
-        account.should.have.keys ['name', 'id']
-        saved.account = account
-      ).then('post', -> @ 'companies2', { name: 'n', orgnr: 'nbr', account: saved.account.id }, noErr (company) ->
-        saved.company = company
-        company.should.have.keys ['id', 'name', 'orgnr', 'account']
-      ).then('post', -> @ 'companies2', { name: 'n2', orgnr: 'nbr', account: saved.account.id }, noErr (company2) ->
-        saved.company2 = company2
-        company2.should.have.keys ['id', 'name', 'orgnr', 'account']
-      ).then('post', -> @ 'contacts', { email: '@', phone: '112', company: saved.company.id }, noErr (contact) ->
-        saved.contact = contact
-        contact.should.have.keys ['id', 'email', 'phone', 'account', 'company']
-      ).then('post', -> @ 'contacts', { email: '@2', phone: '911', company: saved.company2.id }, noErr (contact2) ->
-        saved.contact2 = contact2
-        contact2.should.have.keys ['id', 'email', 'phone', 'account', 'company']
-      ).then('post', -> @ 'pets', { race: 'dog', contact: saved.contact.id }, noErr (pet) ->
-        pet.should.have.keys ['id', 'race', 'account', 'company', 'contact']
-        pet.contact.should.eql saved.contact.id
-        pet.company.should.eql saved.company.id
-        pet.account.should.eql saved.account.id
-      ).then('post', -> @ 'pets', { race: 'dog', contact: saved.contact2.id }, noErr (pet) ->
-        pet.should.have.keys ['id', 'race', 'account', 'company', 'contact']
-        pet.contact.should.eql saved.contact2.id
-        pet.company.should.eql saved.company2.id
-        pet.account.should.eql saved.account.id
-
-      ).list('pets', {}, noErr ((res) -> res.length.should.eql 2))
-      .list('contacts', {}, noErr ((res) -> res.length.should.eql 2))
-      .list('companies2', {}, noErr ((res) -> res.length.should.eql 2))
-      .list('accounts', {}, noErr ((res) -> res.length.should.eql 1))
-
-      .then('delOne', -> @ 'companies2', { id: saved.company.id }, noErr())
-
-      .list('pets', {}, noErr ((res) -> res.length.should.eql 1))
-      .list('contacts', {}, noErr ((res) -> res.length.should.eql 1))
-      .list('companies2', {}, noErr ((res) -> res.length.should.eql 1))
-      .list('accounts', {}, noErr ((res) -> res.length.should.eql 1))
-
-      .then -> api.close(done)
 
 
     it "should provide has-one-relations", (done) ->
@@ -1316,3 +1445,72 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       ).then('list', -> @ 'monkeys', {}, noErr (monkeys) ->
         monkeys.length.should.eql 1
       ).then(done)
+
+
+
+    it "should provide some typical http-operations", (done) ->
+      api = manikin.create()
+
+      model =
+        accounts:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+        companies:
+          owners:
+            account: 'accounts'
+          fields:
+            name: { type: 'string', default: '' }
+            orgnr: { type: 'string', default: '' }
+
+        employees:
+          owners:
+            company: 'companies'
+          fields:
+            name: { type: 'string', default: '' }
+
+        customers:
+          fields:
+            name: { type: 'string' }
+            at: { type: 'hasMany', model: 'companies' }
+
+      saved = {}
+
+      promise(api).connect(connectionData, model, noErr())
+      .post('accounts', { name: 'n1' }, noErr (a1) ->
+        a1.should.have.keys ['name', 'id']
+        saved.a1 = a1
+      ).then('post', -> @ 'accounts', { name: 'n2' }, noErr (a2) ->
+        a2.should.have.keys ['name', 'id']
+        saved.a2 = a2
+      ).list('accounts', {}, noErr (accs) ->
+        accs.should.eql [saved.a1, saved.a2]
+      ).then('getOne', -> @ 'accounts', { filter: { id: saved.a1.id } }, noErr (acc) ->
+        acc.should.eql saved.a1
+      ).then('getOne', -> @ 'accounts', { filter: { name: 'n2' } }, noErr (acc) ->
+        acc.should.eql saved.a2
+      ).then('getOne', -> @ 'accounts', { filter: { name: 'does-not-exist' } }, (err, acc) ->
+        err.toString().should.eql 'Error: No match'
+        should.not.exist acc
+
+      ).then('post', -> @ 'companies', { account: saved.a1.id, name: 'J Dev AB', orgnr: '556767-2208' }, noErr (company) ->
+        company.should.have.keys ['name', 'orgnr', 'account', 'id', 'at']
+        saved.c1 = company
+      ).then('post', -> @ 'companies', { account: saved.a1.id, name: 'Lean Machine AB', orgnr: '123456-1234' }, noErr (company) ->
+        company.should.have.keys ['name', 'orgnr', 'account', 'id', 'at']
+        saved.c2 = company
+      ).then('post', -> @ 'employees', { company: saved.c1.id, name: 'Jakob' }, noErr (company) ->
+        company.should.have.keys ['name', 'company', 'account', 'id']
+
+      # testing to get an account without nesting
+      ).then('getOne', -> @ 'accounts', { filter: { id: saved.a1.id } }, noErr (acc) ->
+        _(acc).omit('id').should.eql { name: 'n1' }
+
+      # testing to get an account with nesting
+      ).then('getOne', -> @ 'accounts', { nesting: 1, filter: { id: saved.a1.id } }, noErr (acc) ->
+        _(acc).omit('id').should.eql { name: 'n1' }
+
+
+      ).then ->
+        api.close(done)
