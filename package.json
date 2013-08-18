@@ -23,8 +23,6 @@
     "mocha": ">= 1.7.4 < 2"
   },
   "scripts": {
-    "pretest": "coffee -co lib src",
-    "prepublish": "coffee -co lib src",
-    "prestart": "coffee -co lib src"
+    "prepublish": "coffee -co lib src"
   }
 }
