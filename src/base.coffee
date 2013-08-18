@@ -1019,3 +1019,20 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
             err.should.eql new Error()
             err.toString().should.eql 'Error: Invalid fields: age, desc'
             api.close(done)
+
+
+
+    it "should raise an error if a post attempts to put nonexisting fields", (done) ->
+      api = manikin.create()
+      mad = {
+        apa:
+          fields:
+            v1: 'string'
+      }
+
+      api.connect connectionData, noErr ->
+        api.load mad, noErr ->
+          api.post 'apa', { v1: '2', v2: '1' }, (err) ->
+            err.should.eql new Error()
+            err.toString().should.eql 'Error: Invalid fields: v2'
+            api.close(done)
