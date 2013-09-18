@@ -22,6 +22,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       dropDatabase(connectionData, done)
 
 
+
     it "should be possible to post a many-to-many relation", (done) ->
       api = manikin.create()
 
@@ -43,6 +44,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
             api.post 'devices', { name: 'q1' }, noErr (d1) ->
               api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
                 api.close(done)
+
 
 
     it "should be possible to query a many-to-many relation", (done) ->
@@ -74,6 +76,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                   api.close(done)
 
 
+
     it "should be possible to delete a many-to-many relation", (done) ->
       api = manikin.create()
 
@@ -98,9 +101,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                   api.getMany 'people', q1.id, 'boundDevices', noErr (boundDevices) ->
                     boundDevices.should.have.length 0
                     api.close(done)
-
-
-
 
 
 
@@ -131,6 +131,161 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                     id: q1.id
                   }]
                   api.close(done)
+
+
+
+    it "should be possible to filter results for getMany and get some matches", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            api.post 'devices', { name: 'q1' }, noErr (d1) ->
+              api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                api.getMany 'devices', d1.id, 'boundPeople', { name: d1.name }, noErr (boundPeople) ->
+                  boundPeople.should.have.length 1
+                  api.close(done)
+
+
+
+    it "should be possible to filter results for getMany and get no matches", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            api.post 'devices', { name: 'q1' }, noErr (d1) ->
+              api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                api.getMany 'devices', d1.id, 'boundPeople', { name: 'unused' }, noErr (boundPeople) ->
+                  boundPeople.should.have.length 0
+                  api.close(done)
+
+
+    it "should return an empty array for unused many-to-many relations", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            q1.boundDevices.should.eql []
+            api.close(done)
+
+
+
+    it "should return an empty array for unused reversed many-to-many relations", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'devices', { name: 'q1' }, noErr (q1) ->
+            q1.boundPeople.should.eql []
+            api.close(done)
+
+
+
+
+
+
+
+    it "should delete reverse manyToMany when the base one is deleted", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            api.post 'devices', { name: 'q1' }, noErr (d1) ->
+              api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                api.delMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                  api.getMany 'devices', d1.id, 'boundPeople', noErr (boundPeople) ->
+                    boundPeople.should.have.length 0
+                    api.close(done)
+
+
+
+    it "should delete manyToMany when the reverse one is deleted", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            api.post 'devices', { name: 'q1' }, noErr (d1) ->
+              api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                api.delMany 'devices', d1.id, 'boundPeople', q1.id, noErr ->
+                  api.getMany 'people', q1.id, 'boundDevices', noErr (boundDevices) ->
+                    boundDevices.should.have.length 0
+                    api.close(done)
 
 
 
@@ -200,7 +355,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       .then('post', -> @('petsY', { name: 'pet1' }, noErr (res) -> saved.pet1 = res))
       .then('post', -> @('foodsY', { name: 'food1' }, noErr (res) -> saved.food1 = res))
       .then('postMany', -> @('foodsY', saved.food1.id, 'eatenBy', saved.pet1.id, noErr()))
-      .then('getMany', -> @('petsY', saved.pet1.id, 'eats', noErr((data) -> data.length.should.eql 1)))
       .then('delOne', -> @('petsY', { id: saved.pet1.id }, noErr()))
       .then('list', -> @('petsY', { }, noErr((data) -> data.length.should.eql 0)))
       .then('list', -> @('foodsY', { }, noErr (data) -> data.should.eql [
@@ -277,6 +431,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                 resultStatuses[result.status]++
                 callback()
             , ->
+              console.log(resultStatuses)
               resultStatuses['inserted'].should.eql 1
               resultStatuses['insert already in progress'].should.eql 2
               api.list 'typeA', {}, noErr (x) ->
@@ -385,106 +540,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
               err.should.eql new Error()
               err.toString().should.eql 'Error: No such id'
               api.close(done)
-
-
-
-    it "should provide has-one-relations", (done) ->
-      api = manikin.create()
-      model =
-
-        accounts:
-          defaultSort: 'name'
-          fields:
-            email: 'string'
-
-        questions:
-          owners: account: 'accounts'
-          defaultSort: 'order'
-          fields:
-            text: 'string'
-
-        devices:
-          owners: account: 'accounts'
-          fields:
-            name: 'string'
-
-        answers:
-          owners: question: 'questions'
-          fields:
-            option: 'number'
-            device:
-              type: 'hasOne'
-              model: 'devices'
-
-      saved = {}
-      promise(api).connect(connectionData, model, noErr())
-      .post('accounts', { email: 'some@email.com' }, noErr (account) ->
-        saved.account = account
-      ).then('post', -> @ 'questions', { text: 'q1', account: saved.account.id }, noErr (question) ->
-        saved.q1 = question
-      ).then('post', -> @ 'questions', { text: 'q2', account: saved.account.id }, noErr (question) ->
-        saved.q2 = question
-      ).then('post', -> @ 'devices', { name: 'd1', account: saved.account.id }, noErr (device) ->
-        saved.d1 = device
-      ).then('post', -> @ 'devices', { name: 'd1', account: saved.account.id }, noErr (device) ->
-        saved.d2 = device
-
-      # Can set it to a deviceID
-      ).then('post', -> @ 'answers', { option: 1, question: saved.q1.id, device: saved.d1.id }, noErr (answer) ->
-        answer.device.should.eql saved.d1.id
-        saved.a1 = answer
-
-      #Can set it to null
-      ).then('post', -> @ 'answers', { option: 1, question: saved.q1.id, device: null }, noErr (answer) ->
-        should.not.exist answer.device
-        saved.a2 = answer
-
-      # Can update it to null
-      ).then('putOne', -> @ 'answers', { device: null }, { id: saved.a1.id }, noErr (answer) ->
-        should.not.exist answer.device
-
-      # Can update it to another device
-      ).then('putOne', -> @ 'answers', { device: saved.d2.id }, { id: saved.a1.id }, noErr (answer) ->
-        answer.device.should.eql saved.d2.id
-
-      # If the devices is deleted, the answers device is set to null
-      ).then('delOne', -> @ 'devices', { id: saved.d2.id }, noErr () ->
-        (1).should.eql 1
-      ).then('getOne', -> @ 'answers', { filter: { id: saved.a1.id } }, noErr (answer) ->
-        should.not.exist answer.device
-
-      # Can't update it to something that is not a key of the correct type
-      ).then('putOne', -> @ 'answers', { device: saved.a2.id }, { id: saved.a1.id }, (err, answer) ->
-        err.should.eql new Error()
-        err.toString().should.eql "Error: Invalid hasOne-key for 'device'"
-        should.not.exist answer
-
-      ).then(done)
-
-
-    it "should be possible to add objects even when their hasOnes-collections are empty", (done) ->
-      api = manikin.create()
-      model =
-        bananas:
-          owners: {}
-          fields:
-            color: 'string'
-
-        monkeys:
-          owners: {}
-          fields:
-            name: 'string'
-            banana:
-              type: 'hasOne'
-              model: 'bananas'
-
-      saved = {}
-      promise(api).connect(connectionData, model, noErr())
-      .then('post', -> @ 'monkeys', { name: 'george' }, noErr (monkey) ->
-        saved.monkey = monkey
-      ).then('list', -> @ 'monkeys', {}, noErr (monkeys) ->
-        monkeys.length.should.eql 1
-      ).then(done)
 
 
 
