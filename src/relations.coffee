@@ -13,7 +13,7 @@ promise = core.promise
 
 exports.runTests = (manikin, dropDatabase, connectionData) ->
 
-  describe 'Manikin', ->
+  describe 'Relational manikin', ->
 
     beforeEach (done) ->
       dropDatabase(connectionData, done)
@@ -22,8 +22,121 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       dropDatabase(connectionData, done)
 
 
+    it "should be possible to post a many-to-many relation", (done) ->
+      api = manikin.create()
 
-    it "should be possible to query many-to-many-relationships", (done) ->
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            api.post 'devices', { name: 'q1' }, noErr (d1) ->
+              api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                api.close(done)
+
+
+    it "should be possible to query a many-to-many relation", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            api.post 'devices', { name: 'q1' }, noErr (d1) ->
+              api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                api.getMany 'people', q1.id, 'boundDevices', noErr (boundDevices) ->
+                  boundDevices.should.eql [{
+                    name: q1.name
+                    boundPeople: [q1.id]
+                    id: d1.id
+                  }]
+                  api.close(done)
+
+
+    it "should be possible to delete a many-to-many relation", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            api.post 'devices', { name: 'q1' }, noErr (d1) ->
+              api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                api.delMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                  api.getMany 'people', q1.id, 'boundDevices', noErr (boundDevices) ->
+                    boundDevices.should.have.length 0
+                    api.close(done)
+
+
+
+
+
+
+    it "should create an inverse relation when posting a many-to-many", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            api.post 'devices', { name: 'q1' }, noErr (d1) ->
+              api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                api.getMany 'devices', d1.id, 'boundPeople', noErr (boundPeople) ->
+                  boundPeople.should.eql [{
+                    name: d1.name
+                    boundDevices: [d1.id]
+                    id: q1.id
+                  }]
+                  api.close(done)
+
+
+
+
+
+    it "should be possible to query many-to-many-relationships (2)", (done) ->
       api = manikin.create()
 
       model =
@@ -307,9 +420,9 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       promise(api).connect(connectionData, model, noErr())
       .post('accounts', { email: 'some@email.com' }, noErr (account) ->
         saved.account = account
-      ).then('post', -> @ 'questions', { name: 'q1', account: saved.account.id }, noErr (question) ->
+      ).then('post', -> @ 'questions', { text: 'q1', account: saved.account.id }, noErr (question) ->
         saved.q1 = question
-      ).then('post', -> @ 'questions', { name: 'q2', account: saved.account.id }, noErr (question) ->
+      ).then('post', -> @ 'questions', { text: 'q2', account: saved.account.id }, noErr (question) ->
         saved.q2 = question
       ).then('post', -> @ 'devices', { name: 'd1', account: saved.account.id }, noErr (device) ->
         saved.d1 = device

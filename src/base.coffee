@@ -39,7 +39,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
 
 
-  describe 'Manikin', ->
+  describe 'Basic manikin', ->
 
     beforeEach (done) ->
       dropDatabase(connectionData, done)
