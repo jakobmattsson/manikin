@@ -13,7 +13,7 @@ promise = core.promise
 
 exports.runTests = (manikin, dropDatabase, connectionData) ->
 
-  describe 'Relational manikin', ->
+  describe 'One-to-Many manikin', ->
 
     beforeEach (done) ->
       dropDatabase(connectionData, done)

@@ -1036,3 +1036,24 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
             err.should.eql new Error()
             err.toString().should.eql 'Error: Invalid fields: v2'
             api.close(done)
+
+
+
+    it "should raise an error if a putOne attempts to put using an id from another collection", (done) ->
+      api = manikin.create()
+
+      model =
+        accounts:
+          fields:
+            name: { type: 'string', default: '' }
+        other:
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, model, noErr ->
+        api.post 'other', { name: 'a1' }, noErr (other) ->
+          api.post 'accounts', { name: 'a1' }, noErr (account) ->
+            api.putOne 'accounts', { name: 'n1' }, { id: other.id }, (err, data) ->
+              err.should.eql new Error()
+              err.toString().should.eql 'Error: No such id'
+              api.close(done)

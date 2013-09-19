@@ -13,7 +13,7 @@ promise = core.promise
 
 exports.runTests = (manikin, dropDatabase, connectionData) ->
 
-  describe 'Relational manikin', ->
+  describe 'Many-to-Many manikin', ->
 
     beforeEach (done) ->
       dropDatabase(connectionData, done)
@@ -185,6 +185,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                   api.close(done)
 
 
+
     it "should return an empty array for unused many-to-many relations", (done) ->
       api = manikin.create()
 
@@ -228,10 +229,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
           api.post 'devices', { name: 'q1' }, noErr (q1) ->
             q1.boundPeople.should.eql []
             api.close(done)
-
-
-
-
 
 
 
@@ -286,8 +283,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                   api.getMany 'people', q1.id, 'boundDevices', noErr (boundDevices) ->
                     boundDevices.should.have.length 0
                     api.close(done)
-
-
 
 
 
@@ -431,7 +426,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                 resultStatuses[result.status]++
                 callback()
             , ->
-              console.log(resultStatuses)
               resultStatuses['inserted'].should.eql 1
               resultStatuses['insert already in progress'].should.eql 2
               api.list 'typeA', {}, noErr (x) ->
@@ -471,6 +465,37 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
               api.list 'typeC', {}, noErr (x) ->
                 x[0].belongsTo2.length.should.eql 1
                 api.close(done)
+
+
+
+    it "should allow adding back a manyToMany relation after deleting it", (done) ->
+      api = manikin.create()
+
+      model =
+        people:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+            boundDevices: { type: 'hasMany', model: 'devices', inverseName: 'boundPeople' }
+
+        devices:
+          owners: {}
+          fields:
+            name: { type: 'string', default: '' }
+
+      api.connect connectionData, noErr ->
+        api.load model, noErr ->
+          api.post 'people', { name: 'q1' }, noErr (q1) ->
+            api.post 'devices', { name: 'q1' }, noErr (d1) ->
+              api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ->
+                api.delMany 'devices', d1.id, 'boundPeople', q1.id, noErr ->
+                  api.getMany 'people', q1.id, 'boundDevices', noErr (boundDevices) ->
+                    boundDevices.should.have.length 0
+                    api.postMany 'people', q1.id, 'boundDevices', d1.id, noErr ({ status }) ->
+                      status.should.eql 'inserted'
+                      api.getMany 'people', q1.id, 'boundDevices', noErr (boundDevices) ->
+                        boundDevices.should.have.length 1
+                        api.close(done)
 
 
 
@@ -522,90 +547,183 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
 
 
-    it "should raise an error if a putOne attempts to put using an id from another collection", (done) ->
+    it "should raise an error on gets to invalid many to many-properties", (done) ->
       api = manikin.create()
 
       model =
-        accounts:
+        typeA:
           fields:
-            name: { type: 'string', default: '' }
-        other:
-          fields:
-            name: { type: 'string', default: '' }
+            name: 'string'
 
+        typeB:
+          fields:
+            name: 'string'
+            belongsTo: { type: 'hasMany', model: 'typeA' }
+
+      saved = {}
       api.connect connectionData, model, noErr ->
-        api.post 'other', { name: 'a1' }, noErr (other) ->
-          api.post 'accounts', { name: 'a1' }, noErr (account) ->
-            api.putOne 'accounts', { name: 'n1' }, { id: other.id }, (err, data) ->
+        api.post 'typeA', { name: 'a' }, noErr (a) ->
+          api.post 'typeB', { name: 'b' }, noErr (b) ->
+            api.getMany 'typeA', a.id, 'relation-that-does-not-exist', b.id, (err) ->
               err.should.eql new Error()
-              err.toString().should.eql 'Error: No such id'
+              err.toString().should.eql 'Error: Invalid many-to-many property'
               api.close(done)
 
 
 
-    it "should provide some typical http-operations", (done) ->
+    it "should raise an error on getMany with invalid model id", (done) ->
       api = manikin.create()
 
       model =
-        accounts:
-          owners: {}
+        typeA:
           fields:
-            name: { type: 'string', default: '' }
+            name: 'string'
 
-        companies:
-          owners:
-            account: 'accounts'
+        typeB:
           fields:
-            name: { type: 'string', default: '' }
-            orgnr: { type: 'string', default: '' }
-
-        employees:
-          owners:
-            company: 'companies'
-          fields:
-            name: { type: 'string', default: '' }
-
-        customers:
-          fields:
-            name: { type: 'string' }
-            at: { type: 'hasMany', model: 'companies' }
+            name: 'string'
+            belongsTo: { type: 'hasMany', model: 'typeA' }
 
       saved = {}
-
-      promise(api).connect(connectionData, model, noErr())
-      .post('accounts', { name: 'n1' }, noErr (a1) ->
-        a1.should.have.keys ['name', 'id']
-        saved.a1 = a1
-      ).then('post', -> @ 'accounts', { name: 'n2' }, noErr (a2) ->
-        a2.should.have.keys ['name', 'id']
-        saved.a2 = a2
-      ).list('accounts', {}, noErr (accs) ->
-        accs.should.eql [saved.a1, saved.a2]
-      ).then('getOne', -> @ 'accounts', { filter: { id: saved.a1.id } }, noErr (acc) ->
-        acc.should.eql saved.a1
-      ).then('getOne', -> @ 'accounts', { filter: { name: 'n2' } }, noErr (acc) ->
-        acc.should.eql saved.a2
-      ).then('getOne', -> @ 'accounts', { filter: { name: 'does-not-exist' } }, (err, acc) ->
-        err.toString().should.eql 'Error: No match'
-        should.not.exist acc
-
-      ).then('post', -> @ 'companies', { account: saved.a1.id, name: 'J Dev AB', orgnr: '556767-2208' }, noErr (company) ->
-        company.should.have.keys ['name', 'orgnr', 'account', 'id', 'at']
-        saved.c1 = company
-      ).then('post', -> @ 'companies', { account: saved.a1.id, name: 'Lean Machine AB', orgnr: '123456-1234' }, noErr (company) ->
-        company.should.have.keys ['name', 'orgnr', 'account', 'id', 'at']
-        saved.c2 = company
-      ).then('post', -> @ 'employees', { company: saved.c1.id, name: 'Jakob' }, noErr (company) ->
-        company.should.have.keys ['name', 'company', 'account', 'id']
-
-      # testing to get an account without nesting
-      ).then('getOne', -> @ 'accounts', { filter: { id: saved.a1.id } }, noErr (acc) ->
-        _(acc).omit('id').should.eql { name: 'n1' }
-
-      # testing to get an account with nesting
-      ).then('getOne', -> @ 'accounts', { nesting: 1, filter: { id: saved.a1.id } }, noErr (acc) ->
-        _(acc).omit('id').should.eql { name: 'n1' }
+      api.connect connectionData, model, noErr ->
+        api.post 'typeA', { name: 'a' }, noErr (a) ->
+          api.post 'typeB', { name: 'b' }, noErr (b) ->
+            api.getMany 'typeA', 'invalid-id', 'belongsTo', b.id, (err) ->
+              err.should.eql new Error()
+              err.toString().should.eql "Error: Could not find an instance of 'typeA' with id 'invalid-id'"
+              api.close(done)
 
 
-      ).then ->
-        api.close(done)
+
+    it "should raise an error on delMany with invalid model id", (done) ->
+      api = manikin.create()
+
+      model =
+        typeA:
+          fields:
+            name: 'string'
+
+        typeB:
+          fields:
+            name: 'string'
+            belongsTo: { type: 'hasMany', model: 'typeA' }
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'typeA', { name: 'a' }, noErr (a) ->
+          api.post 'typeB', { name: 'b' }, noErr (b) ->
+            api.delMany 'typeA', 'invalid-id', 'belongsTo', b.id, (err) ->
+              err.should.eql new Error()
+              err.toString().should.eql "Error: Could not find an instance of 'typeA' with id 'invalid-id'"
+              api.close(done)
+
+
+
+    it "should raise an error on delMany with invalid secondary model id", (done) ->
+      api = manikin.create()
+
+      model =
+        typeA:
+          fields:
+            name: 'string'
+
+        typeB:
+          fields:
+            name: 'string'
+            belongsTo: { type: 'hasMany', model: 'typeA' }
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'typeA', { name: 'a' }, noErr (a) ->
+          api.post 'typeB', { name: 'b' }, noErr (b) ->
+            api.delMany 'typeA', a.id, 'belongsTo', 'invalid-id', (err) ->
+              err.should.eql new Error()
+              err.toString().should.eql "Error: Could not find an instance of 'typeB' with id 'invalid-id'"
+              api.close(done)
+
+
+
+    it "should raise an error on postMany with invalid model id", (done) ->
+      api = manikin.create()
+
+      model =
+        typeA:
+          fields:
+            name: 'string'
+
+        typeB:
+          fields:
+            name: 'string'
+            belongsTo: { type: 'hasMany', model: 'typeA' }
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'typeA', { name: 'a' }, noErr (a) ->
+          api.post 'typeB', { name: 'b' }, noErr (b) ->
+            api.postMany 'typeA', 'invalid-id', 'belongsTo', b.id, (err) ->
+              err.should.eql new Error()
+              err.toString().should.eql "Error: Could not find an instance of 'typeA' with id 'invalid-id'"
+              api.close(done)
+
+
+
+    it "should raise an error on postMany with invalid secondary model id", (done) ->
+      api = manikin.create()
+
+      model =
+        typeA:
+          fields:
+            name: 'string'
+
+        typeB:
+          fields:
+            name: 'string'
+            belongsTo: { type: 'hasMany', model: 'typeA' }
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'typeA', { name: 'a' }, noErr (a) ->
+          api.post 'typeB', { name: 'b' }, noErr (b) ->
+            api.postMany 'typeA', a.id, 'belongsTo', 'invalid-id', (err) ->
+              err.should.eql new Error()
+              err.toString().should.eql "Error: Could not find an instance of 'typeB' with id 'invalid-id'"
+              api.close(done)
+
+
+
+    it "should never insert duplicates of manyToMany-relations", (done) ->
+      api = manikin.create()
+
+      model =
+        typeA:
+          fields:
+            name: 'string'
+
+        typeB:
+          fields:
+            name: 'string'
+            belongsTo: { type: 'hasMany', model: 'typeA' }
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'typeA', { name: 'a' }, noErr (a) ->
+          api.post 'typeB', { name: 'b' }, noErr (b) ->
+            api.postMany 'typeA', a.id, 'belongsTo', b.id, noErr ({ status }) ->
+              status.should.eql 'inserted'
+              api.postMany 'typeA', a.id, 'belongsTo', b.id, noErr ({ status }) ->
+                status.should.eql 'already inserted'
+                api.getMany 'typeA', a.id, 'belongsTo', noErr (result) ->
+                  result.should.have.length 1
+                  api.list 'typeA', {}, noErr (aList) ->
+                    aList.should.eql [{
+                      id: a.id
+                      name: a.name
+                      belongsTo: [b.id]
+                    }]
+                    api.list 'typeB', {}, noErr (bList) ->
+                      bList.should.eql [{
+                        id: b.id
+                        name: b.name
+                        belongsTo: [a.id]
+                      }]
+                      api.close(done)
