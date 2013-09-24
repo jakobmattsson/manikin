@@ -23,28 +23,18 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
 
 
-    it "should provide has-one-relations", (done) ->
+
+
+
+    it "should be possible to save hasOne-values", (done) ->
       api = manikin.create()
       model =
 
-        accounts:
-          defaultSort: 'name'
-          fields:
-            email: 'string'
-
-        questions:
-          owners: account: 'accounts'
-          defaultSort: 'order'
-          fields:
-            text: 'string'
-
         devices:
-          owners: account: 'accounts'
           fields:
             name: 'string'
 
         answers:
-          owners: question: 'questions'
           fields:
             option: 'number'
             device:
@@ -52,71 +42,164 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
               model: 'devices'
 
       saved = {}
-      promise(api).connect(connectionData, model, noErr())
-      .post('accounts', { email: 'some@email.com' }, noErr (account) ->
-        saved.account = account
-      ).then('post', -> @ 'questions', { text: 'q1', account: saved.account.id }, noErr (question) ->
-        saved.q1 = question
-      ).then('post', -> @ 'questions', { text: 'q2', account: saved.account.id }, noErr (question) ->
-        saved.q2 = question
-      ).then('post', -> @ 'devices', { name: 'd1', account: saved.account.id }, noErr (device) ->
-        saved.d1 = device
-      ).then('post', -> @ 'devices', { name: 'd1', account: saved.account.id }, noErr (device) ->
-        saved.d2 = device
-
-      # Can set it to a deviceID
-      ).then('post', -> @ 'answers', { option: 1, question: saved.q1.id, device: saved.d1.id }, noErr (answer) ->
-        answer.device.should.eql saved.d1.id
-        saved.a1 = answer
-
-      #Can set it to null
-      ).then('post', -> @ 'answers', { option: 1, question: saved.q1.id, device: null }, noErr (answer) ->
-        should.not.exist answer.device
-        saved.a2 = answer
-
-      # Can update it to null
-      ).then('putOne', -> @ 'answers', { device: null }, { id: saved.a1.id }, noErr (answer) ->
-        should.not.exist answer.device
-
-      # Can update it to another device
-      ).then('putOne', -> @ 'answers', { device: saved.d2.id }, { id: saved.a1.id }, noErr (answer) ->
-        answer.device.should.eql saved.d2.id
-
-      # If the devices is deleted, the answers device is set to null
-      ).then('delOne', -> @ 'devices', { id: saved.d2.id }, noErr () ->
-        (1).should.eql 1
-      ).then('getOne', -> @ 'answers', { filter: { id: saved.a1.id } }, noErr (answer) ->
-        should.not.exist answer.device
-
-      # Can't update it to something that is not a key of the correct type
-      ).then('putOne', -> @ 'answers', { device: saved.a2.id }, { id: saved.a1.id }, (err, answer) ->
-        err.should.eql new Error()
-        err.toString().should.eql "Error: Invalid hasOne-key for 'device'"
-        should.not.exist answer
-
-      ).then(done)
+      api.connect connectionData, model, noErr ->
+        api.post 'devices', { name: 'd1' }, noErr (device) ->
+          api.post 'answers', { option: 1, device: device.id }, noErr (answer) ->
+            answer.device.should.eql device.id
+            api.close(done)
 
 
-    it "should be possible to add objects even when their hasOnes-collections are empty", (done) ->
+
+    it "can initialize a hasOne to null", (done) ->
       api = manikin.create()
       model =
-        bananas:
-          owners: {}
-          fields:
-            color: 'string'
 
-        monkeys:
-          owners: {}
+        devices:
           fields:
             name: 'string'
-            banana:
+
+        answers:
+          fields:
+            option: 'number'
+            device:
               type: 'hasOne'
-              model: 'bananas'
+              model: 'devices'
 
       saved = {}
-      promise(api).connect(connectionData, model, noErr())
-      .then('post', -> @ 'monkeys', { name: 'george' }, noErr (monkey) ->
-        saved.monkey = monkey
-      ).then('list', -> @ 'monkeys', {}, noErr (monkeys) ->
-        monkeys.length.should.eql 1
-      ).then(done)
+      api.connect connectionData, model, noErr ->
+        api.post 'devices', { name: 'd1' }, noErr (device) ->
+          api.post 'answers', { option: 1, device: null }, noErr (answer) ->
+            should.not.exist answer.device
+            api.close(done)
+
+
+
+    it "can overwrite a hasOne with null", (done) ->
+      api = manikin.create()
+      model =
+
+        devices:
+          fields:
+            name: 'string'
+
+        answers:
+          fields:
+            option: 'number'
+            device:
+              type: 'hasOne'
+              model: 'devices'
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'devices', { name: 'd1' }, noErr (device) ->
+          api.post 'answers', { option: 1, device: device.id }, noErr (answer) ->
+            api.putOne 'answers', { device: null }, answer, noErr (answer2) ->
+              should.not.exist answer2.device
+              api.close(done)
+
+
+
+    it "can update it to another key", (done) ->
+      api = manikin.create()
+      model =
+
+        devices:
+          fields:
+            name: 'string'
+
+        answers:
+          fields:
+            option: 'number'
+            device:
+              type: 'hasOne'
+              model: 'devices'
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'devices', { name: 'd1' }, noErr (device) ->
+          api.post 'devices', { name: 'd2' }, noErr (device2) ->
+            api.post 'answers', { option: 1, device: device.id }, noErr (answer) ->
+              api.putOne 'answers', { device: device2.id }, answer, noErr (answer2) ->
+                answer2.device.should.eql device2.id
+                api.close(done)
+
+
+
+    it "resets the relation to null if the entry pointed to is deleted", (done) ->
+      api = manikin.create()
+      model =
+
+        devices:
+          fields:
+            name: 'string'
+
+        answers:
+          fields:
+            option: 'number'
+            device:
+              type: 'hasOne'
+              model: 'devices'
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'devices', { name: 'd1' }, noErr (device) ->
+          api.post 'answers', { option: 1, device: device.id }, noErr (answer) ->
+            api.delOne 'devices', device, noErr ->
+              api.getOne 'answers', { id: answer.id }, noErr (answer) ->
+                should.not.exist answer.device
+                api.close(done)
+
+
+
+    it "cant update it to something that is not a key", (done) ->
+      api = manikin.create()
+      model =
+
+        devices:
+          fields:
+            name: 'string'
+
+        answers:
+          fields:
+            option: 'number'
+            device:
+              type: 'hasOne'
+              model: 'devices'
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'devices', { name: 'd1' }, noErr (device) ->
+          api.post 'answers', { option: 1, device: device.id }, noErr (answer) ->
+            api.putOne 'answers', { device: 'hellow-there' }, answer, (err, answer2) ->
+              err.should.eql new Error()
+              err.toString().should.eql "Error: Invalid hasOne-key for 'device'"
+              should.not.exist answer2
+              api.close(done)
+
+
+
+    it "cant update it to an id of an entry belonging to another collection", (done) ->
+      api = manikin.create()
+      model =
+
+        devices:
+          fields:
+            name: 'string'
+
+        answers:
+          fields:
+            option: 'number'
+            device:
+              type: 'hasOne'
+              model: 'devices'
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'devices', { name: 'd1' }, noErr (device) ->
+          api.post 'answers', { option: 1, device: device.id }, noErr (answer) ->
+            api.post 'answers', { option: 1, device: device.id }, noErr (answer2) ->
+              api.putOne 'answers', { device: answer2.id }, answer, (err, answer3) ->
+                err.should.eql new Error()
+                err.toString().should.eql "Error: Invalid hasOne-key for 'device'"
+                should.not.exist answer3
+                api.close(done)
