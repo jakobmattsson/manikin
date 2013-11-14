@@ -203,3 +203,32 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                 err.toString().should.eql "Error: Invalid hasOne-key for 'device'"
                 should.not.exist answer3
                 api.close(done)
+
+
+
+    it "can filter one-to-manys using a list", (done) ->
+      api = manikin.create()
+      model =
+
+        devices:
+          fields:
+            name: 'string'
+
+        answers:
+          fields:
+            option: 'number'
+            device:
+              type: 'hasOne'
+              model: 'devices'
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'devices', { name: 'd1' }, noErr (d1) ->
+          api.post 'devices', { name: 'd2' }, noErr (d2) ->
+            api.post 'devices', { name: 'd3' }, noErr (d3) ->
+              api.post 'answers', { option: 1, device: d1.id }, noErr (a1) ->
+                api.post 'answers', { option: 2, device: d2.id }, noErr (a2) ->
+                  api.post 'answers', { option: 3, device: d3.id }, noErr (a3) ->
+                    api.list 'answers', { device: [d1.id, d2.id] }, noErr (result) ->
+                      _(result).pluck('option').sort().should.eql [1,2]
+                      api.close(done)

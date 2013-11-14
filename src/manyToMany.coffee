@@ -727,3 +727,32 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                         belongsTo: [a.id]
                       }]
                       api.close(done)
+
+
+
+    it "can filter many-to-manys using a list", (done) ->
+      api = manikin.create()
+      model =
+        typeA:
+          fields:
+            name: 'string'
+
+        typeB:
+          fields:
+            name: 'string'
+            belongsTo: { type: 'hasMany', model: 'typeA' }
+
+      saved = {}
+      api.connect connectionData, model, noErr ->
+        api.post 'typeA', { name: 'a1' }, noErr (a1) ->
+          api.post 'typeA', { name: 'a2' }, noErr (a2) ->
+            api.post 'typeA', { name: 'a3' }, noErr (a3) ->
+              api.post 'typeB', { name: 'b1' }, noErr (b1) ->
+                api.post 'typeB', { name: 'b2' }, noErr (b2) ->
+                  api.post 'typeB', { name: 'b3' }, noErr (b3) ->
+                    api.postMany 'typeA', a1.id, 'belongsTo', b1.id, noErr ->
+                      api.postMany 'typeA', a1.id, 'belongsTo', b2.id, noErr ->
+                        api.postMany 'typeA', a2.id, 'belongsTo', b1.id, noErr ->
+                          api.list 'typeB', { belongsTo: [a1.id, a2.id] }, noErr (result) ->
+                            _(result).pluck('name').sort().should.eql ['b1', 'b2']
+                            api.close(done)

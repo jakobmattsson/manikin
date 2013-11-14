@@ -385,6 +385,28 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
 
 
+    it "can filter out objects using an array of valid values", (done) ->
+      api = manikin.create()
+
+      model =
+        stuffz:
+          fields:
+            name: 'string'
+            age: 'number'
+
+      saved = {}
+
+      promise(api).connect(connectionData, model, noErr())
+      .post('stuffz', { name: 'jakob',  age: 28 }, noErr())
+      .post('stuffz', { name: 'julia',  age: 27 }, noErr())
+      .post('stuffz', { name: 'sixten', age: 16 }, noErr())
+      .list('stuffz', { age: [28, 27] }, noErr (x) ->
+        _(x).pluck('name').sort().should.eql ['jakob', 'julia']
+      ).then ->
+        api.close(done)
+
+
+
     it "calls back with an error if no objects where found", (done) ->
       api = manikin.create()
 
