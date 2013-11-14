@@ -1,7 +1,7 @@
 {
   "name": "manikin",
   "description": "Data model abstractions",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "main": "./lib/manikin-spec.js",
   "author": "Jakob Mattsson <jakob.mattsson@gmail.com> (jakobmattsson.se)",
   "license": "MIT",
