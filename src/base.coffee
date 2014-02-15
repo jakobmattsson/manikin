@@ -311,6 +311,57 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
         api.close(done)
 
 
+
+    it "can sort objects", (done) ->
+      api = manikin.create()
+
+      model =
+        stuffz:
+          fields:
+            name: 'string'
+            age: 'number'
+
+      saved = {}
+
+      promise(api).connect(connectionData, model, noErr())
+      .post('stuffz', { name: 'jakob', age: 28 }, noErr())
+      .post('stuffz', { name: 'jakob', age: 42 }, noErr())
+      .post('stuffz', { name: 'julia', age: 27 }, noErr())
+      .list('stuffz', { sort: { age: 'asc' } }, noErr (x) ->
+        x.should.have.length 3
+        x[0].age.should.eql 27
+        x[1].age.should.eql 28
+        x[2].age.should.eql 42
+      ).then ->
+        api.close(done)
+
+
+
+    it "can sort objects in a descending", (done) ->
+      api = manikin.create()
+
+      model =
+        stuffz:
+          fields:
+            name: 'string'
+            age: 'number'
+
+      saved = {}
+
+      promise(api).connect(connectionData, model, noErr())
+      .post('stuffz', { name: 'jakob', age: 28 }, noErr())
+      .post('stuffz', { name: 'jakob', age: 42 }, noErr())
+      .post('stuffz', { name: 'julia', age: 27 }, noErr())
+      .list('stuffz', { sort: { age: 'desc' } }, noErr (x) ->
+        x.should.have.length 3
+        x[0].age.should.eql 42
+        x[1].age.should.eql 28
+        x[2].age.should.eql 27
+      ).then ->
+        api.close(done)
+
+
+
     it "can get a single object from its ID", (done) ->
       api = manikin.create()
 
