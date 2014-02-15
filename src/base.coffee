@@ -247,7 +247,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       .post('stuffz', { name: 'jakob', age: 28 }, noErr())
       .post('stuffz', { name: 'julia', age: 27 }, noErr (x) ->
         saved.id = x.id
-      ).then('list', -> @ 'stuffz', { id: saved.id }, noErr (x) ->
+      ).then('list', -> @ 'stuffz', { filter: { id: saved.id } }, noErr (x) ->
         x.should.have.length 1
         x[0].should.eql {
           id: saved.id
@@ -274,7 +274,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       .post('stuffz', { name: 'jakob', age: 28 }, noErr())
       .post('stuffz', { name: 'jakob', age: 42 }, noErr())
       .post('stuffz', { name: 'julia', age: 27 }, noErr())
-      .list('stuffz', { name: 'jakob' }, noErr (x) ->
+      .list('stuffz', { filter: { name: 'jakob' } }, noErr (x) ->
         x.should.have.length 2
         x[0].name.should.eql 'jakob'
         x[0].age.should.eql 28
@@ -302,7 +302,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       .post('stuffz', { name: 'julia', age: 27, city: 'gbg' }, noErr())
       .post('stuffz', { name: 'jakob', age: 28, city: 'sthlm' }, noErr())
       .post('stuffz', { name: 'julia', age: 27, city: 'sthlm' }, noErr())
-      .list('stuffz', { name: 'jakob', city: 'sthlm' }, noErr (x) ->
+      .list('stuffz', { filter: { name: 'jakob', city: 'sthlm' } }, noErr (x) ->
         x.should.have.length 1
         x[0].name.should.eql 'jakob'
         x[0].age.should.eql 28
@@ -400,7 +400,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       .post('stuffz', { name: 'jakob',  age: 28 }, noErr())
       .post('stuffz', { name: 'julia',  age: 27 }, noErr())
       .post('stuffz', { name: 'sixten', age: 16 }, noErr())
-      .list('stuffz', { age: [28, 27] }, noErr (x) ->
+      .list('stuffz', { filter: { age: [28, 27] } }, noErr (x) ->
         _(x).pluck('name').sort().should.eql ['jakob', 'julia']
       ).then ->
         api.close(done)
@@ -648,7 +648,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
       api.load mad, noErr ->
         api.connect connectionData, noErr ->
-          api.list 'non-existing', { v2: '1', v1: '2' }, (err) ->
+          api.list 'non-existing', { filter: { v2: '1', v1: '2' } }, (err) ->
             err.should.eql new Error()
             err.toString().should.eql 'Error: No model named non-existing'
             api.close(done)

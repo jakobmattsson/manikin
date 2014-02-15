@@ -229,6 +229,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
               api.post 'answers', { option: 1, device: d1.id }, noErr (a1) ->
                 api.post 'answers', { option: 2, device: d2.id }, noErr (a2) ->
                   api.post 'answers', { option: 3, device: d3.id }, noErr (a3) ->
-                    api.list 'answers', { device: [d1.id, d2.id] }, noErr (result) ->
+                    api.list 'answers', { filter: { device: [d1.id, d2.id] } }, noErr (result) ->
                       _(result).pluck('option').sort().should.eql [1,2]
                       api.close(done)

@@ -753,6 +753,6 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
                     api.postMany 'typeA', a1.id, 'belongsTo', b1.id, noErr ->
                       api.postMany 'typeA', a1.id, 'belongsTo', b2.id, noErr ->
                         api.postMany 'typeA', a2.id, 'belongsTo', b1.id, noErr ->
-                          api.list 'typeB', { belongsTo: [a1.id, a2.id] }, noErr (result) ->
+                          api.list 'typeB', { filter: { belongsTo: [a1.id, a2.id] } }, noErr (result) ->
                             _(result).pluck('name').sort().should.eql ['b1', 'b2']
                             api.close(done)
