@@ -337,6 +337,49 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
 
 
+    it "can limit number of results returned", (done) ->
+      api = manikin.create()
+
+      model =
+        stuffz:
+          fields:
+            name: 'string'
+            age: 'number'
+
+      saved = {}
+
+      promise(api).connect(connectionData, model, noErr())
+      .post('stuffz', { name: 'jakob', age: 28 }, noErr())
+      .post('stuffz', { name: 'jakob', age: 42 }, noErr())
+      .post('stuffz', { name: 'julia', age: 27 }, noErr())
+      .list('stuffz', { limit: 2 }, noErr (x) ->
+        x.should.have.length 2
+      ).then ->
+        api.close(done)
+
+
+    it "can skip items", (done) ->
+      api = manikin.create()
+
+      model =
+        stuffz:
+          fields:
+            name: 'string'
+            age: 'number'
+
+      saved = {}
+
+      promise(api).connect(connectionData, model, noErr())
+      .post('stuffz', { name: 'jakob', age: 28 }, noErr())
+      .post('stuffz', { name: 'jakob', age: 42 }, noErr())
+      .post('stuffz', { name: 'julia', age: 27 }, noErr())
+      .list('stuffz', { skip: 2 }, noErr (x) ->
+        x.should.have.length 1
+      ).then ->
+        api.close(done)
+
+
+
     it "can sort objects in a descending", (done) ->
       api = manikin.create()
 
