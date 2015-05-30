@@ -178,6 +178,52 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
 
 
 
+    it "should set 'createdAt' automatically, if requested", (done) ->
+      api = manikin.create()
+
+      model =
+        stuffz:
+          createdAtField: 'created__at__123'
+          fields:
+            name: 'string'
+            age: 'number'
+
+      saved = {}
+
+      now = new Date().getTime()
+
+      promise(api).connect(connectionData, model, noErr())
+      .post('stuffz', { name: 'jakob', age: 28 }, noErr())
+      .list('stuffz', {}, noErr (list) ->
+        list.map((x) -> x.created__at__123).should.be.between(now, now + 1000)
+      ).then ->
+        api.close(done)
+
+
+
+    it "should set 'updatedAt' automatically, if requested", (done) ->
+      api = manikin.create()
+
+      model =
+        stuffz:
+          updatedAtField: 'upd'
+          fields:
+            name: 'string'
+            age: 'number'
+
+      saved = {}
+
+      now = new Date().getTime()
+
+      promise(api).connect(connectionData, model, noErr())
+      .post('stuffz', { name: 'jakob', age: 28 }, noErr())
+      .list('stuffz', {}, noErr (list) ->
+        list.map((x) -> x.upd).should.be.between(now, now + 1000)
+      ).then ->
+        api.close(done)
+
+
+
     it "should have post for creating and list for showing what has been created", (done) ->
       api = manikin.create()
 
