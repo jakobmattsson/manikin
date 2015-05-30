@@ -171,8 +171,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
         api.post 'devices', { name: 'd1' }, noErr (device) ->
           api.post 'answers', { option: 1, device: device.id }, noErr (answer) ->
             api.putOne 'answers', { device: 'hellow-there' }, answer, (err, answer2) ->
-              err.should.eql new Error()
-              err.toString().should.eql "Error: Invalid hasOne-key for 'device'"
+              should.exist err
               should.not.exist answer2
               api.close(done)
 
