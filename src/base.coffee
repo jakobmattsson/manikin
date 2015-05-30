@@ -1112,7 +1112,7 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
         async.forEach indata, (d, callback) ->
           api.post 'pizzas', { name: d.name }, (err, res) ->
             if d.response != null
-              err.message.should.eql 'Validation failed'
+              err.message.should.match /Validation failed/i
               err.errors.name.path.should.eql 'name'
             callback()
         , ->
