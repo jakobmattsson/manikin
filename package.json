@@ -15,11 +15,11 @@
   },
   "dependencies": {
     "underscore": "^1.4.0",
-    "async": "^0.2.0",
+    "async": "^1.0.0",
     "should": "^1.2.1"
   },
   "devDependencies": {
-    "coffee-script": "^1.4.0"
+    "coffee-script": "^1.9.3"
   },
   "peerDependencies": {
     "mocha": "^1.7.4"
