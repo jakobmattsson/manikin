@@ -195,7 +195,8 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       promise(api).connect(connectionData, model, noErr())
       .post('stuffz', { name: 'jakob', age: 28 }, noErr())
       .list('stuffz', {}, noErr (list) ->
-        list.map((x) -> x.created__at__123).should.be.between(now, now + 1000)
+        list[0].created__at__123.should.not.be.below(now)
+        list[0].created__at__123.should.not.be.above(now+1000)
       ).then ->
         api.close(done)
 
@@ -218,7 +219,8 @@ exports.runTests = (manikin, dropDatabase, connectionData) ->
       promise(api).connect(connectionData, model, noErr())
       .post('stuffz', { name: 'jakob', age: 28 }, noErr())
       .list('stuffz', {}, noErr (list) ->
-        list.map((x) -> x.upd).should.be.between(now, now + 1000)
+        list[0].upd.should.not.be.below(now)
+        list[0].upd.should.not.be.above(now+1000)
       ).then ->
         api.close(done)
 
